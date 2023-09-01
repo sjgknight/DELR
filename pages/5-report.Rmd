@@ -1,0 +1,20 @@
+---
+title: Report
+---
+
+```{r setup}
+
+#something to re-read everything necessary, and create visualisations, exports of data, and a PRISMA-flow
+
+
+#possibly something to create 'publish' - a dataset or/and summaries for use elsewhere (likely a separate template)
+
+#that might include icons on the bib for openaccess and evidence-standard (and 'keyness')
+
+```
+
+```{r data}
+
+
+```
+

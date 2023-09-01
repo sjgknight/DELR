@@ -1,0 +1,56 @@
+---
+title: "Process to setup Zotero"
+---
+
+
+```{r setup}
+
+# something to connect to Zotero, either an existing group or a new one
+pacman::p_load(magrittr, purrr, dplyr)
+
+pacman::p_load(RefManageR)
+pacman::p_load_gh("paleolimbot/rbbt")
+pacman::p_load_gh("AtlasOfLivingAustralia/potions")
+pacman::p_load_gh("AtlasOfLivingAustralia/boobook")
+pacman::p_load_gh("kleinlennart/zoter")
+
+zrclients <- c(
+  "ropensci/RefManageR",
+  "mbojan/Zoterro",
+  "paleolimbot/rbbt",
+  "giocomai/zoteror",
+  "oeysan/c2z",
+  "kleinlennart/zoter",
+  "AtlasOfLivingAustralia/boobook"
+  )
+
+source("r/get_github_repos_info") #less useful than I'd hoped
+x <- get_github_repos_info(zrclients)
+#purrr::map(zrclients, ~pacman::p_info(.x) %>% .[(c("Package","Description","URL","Packaged"))])
+
+# For managing Zotero (via API):
+# I think zoteror and possibly zoterro are superceded by...
+# boobook; zoter is also more recent but looks less complete
+# c2z may also be useful (although especially for Norweigans)
+
+# For cite-as-you-write style functionality:
+# RefmanageR and rbbt are both useful 
+# primarily for RefManageR::ReadZotero()
+#bib2df also likely useful, and possibly handlr
+
+
+```
+
+## Setup Zotero
+
+Some template collections within a group
+Note templates to use
+Suggests a tag structure
+
+
+```{r zotero-setup}
+#c2z::
+
+
+```
+

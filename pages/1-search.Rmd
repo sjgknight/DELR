@@ -1,0 +1,95 @@
+---
+title: searches
+---
+
+
+Use to either setup and import searches OR/and to read search metadata from Zotero
+
+```{r setup}
+
+pacman::p_load_gh("kaitlynhair/rwos")
+pacman::p_load(openalexR, magrittr, purrr, tidyr, tibble, dplyr, rscopus)
+
+#There's also some scholar and google possibility
+
+```
+
+
+Map the topic space 
+
+1. epistemic cognition OR epistemological beliefs OR epistemic beliefs OR epistemic thinking OR personal epistemology 
+2. socioscientific issues (SSI) teaching and curriculum
+3. synthesis writing
+4. possibly VUCA (volatility, uncertainty, complexity, ambiguity) 
+
+And their application to:
+
+1. teacher education
+2. learning design
+3. classroom interaction
+4. curriculum
+5. "design patterns" OR "toolkit" OR ...
+6. "edtech" ?
+
+```{r testqueries}
+
+
+
+
+```
+
+
+
+```{r retrievequeries}
+data_file <- fs::dir_ls("data/", regexp = "search_output_")
+data_date <- stringr::str_extract(data_file, "\\d{4}-\\d{2}-\\d{2}")
+
+if(any(
+  length(data_file)>0, #does data exist, and 
+  Sys.Date()<=data_date)){
+
+terms <- paste('"epistemic cognition"', '"epistemological beliefs"', '"epistemic beliefs"', sep = "|")
+term_core <- '"epistemic cognition"'
+
+epcog_raw <- openalexR::oa_fetch(
+entity = 'works',
+filter = paste0("from_publication_date:", data_date),
+search = term_core) %>%
+  mutate(term_core_in_raw = TRUE)
+
+epcog_ft <- openalexR::oa_fetch(
+entity = 'works',
+filter = paste0("from_publication_date:", data_date),
+fulltext.search = terms) %>%
+  mutate(terms_in_ft = TRUE)
+
+epcog_ab <- openalexR::oa_fetch(
+entity = 'works', 
+filter = paste0("from_publication_date:", data_date),
+abstract.search = terms) %>%
+  mutate(terms_in_ab = TRUE)
+
+
+epcog_ti <- openalexR::oa_fetch(
+entity = 'works', 
+filter = paste0("from_publication_date:", data_date),
+title.search = terms) %>%
+  mutate(terms_in_ti = TRUE)
+
+epcog <- bind_rows(epcog_ab, epcog_ft, epcog_raw, epcog_ti)
+
+last_saved <- Sys.Date()
+
+readr::write_rds(epcog, paste0("data/search_output_", last_saved, ".rds"))
+
+} else {
+  
+  epcog <- readr::read_rds(data_file)
+}
+
+epcog %>% filter(if_any(everything(), ~stringr::str_detect(., "learning"))) %>% nrow()
+
+
+```
+
+
