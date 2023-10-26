@@ -1,0 +1,257 @@
+---
+title: screening
+author: sjgknight
+date: `r Sys.Date()`
+---
+
+A design-oriented approach to evidence synthesis.
+```{r literaturer}
+
+literature <- readr::read_rds(
+  list.files("data/", pattern = "literature.*\\.rds", full.names = T) %>% 
+    sapply(file.mtime) %>% 
+    which.max() %>% 
+    names()
+  )
+
+query_table <- readr::read_rds(
+  list.files("data/", pattern = "query_table_.*.rds", full.names = T) %>% 
+    sapply(file.mtime) %>% 
+    which.max() %>% 
+    names()
+  )
+
+terms <- query_table$terms_fixed1 %>%
+  stringr::str_split("OR") %>% 
+  unlist() %>% 
+  stringr::str_replace_all("\"","") %>%
+  stringr::str_trim("both") %>% 
+  paste0(collapse = "|")
+
+                                                                        
+title_flags <- c(
+  "The classroom observation protocol for socioscientific issue-based instruction: development and implementation of a new research tool",
+  "How do we do this: learning how to teach socioscientific issues",
+  "Overview of Teachers’ Professional Learning for Socioscientific Issues and Sustainability Education",
+  "Socioscientific Argumentation: The effects of content knowledge and morality",
+  "A teacher professional development model for teaching socioscientific issues",
+  "Seven design principles for teaching complex socioscientific issues: the design of a complex systems agent-based disease epidemic model and the application of epistemic practices in high school biology") 
+
+# https://socialsciences.org.au/wp-content/uploads/2023/03/Climate-Change-Education-March-2023.pdf
+```
+
+
+```{r checkr}
+
+#then select key outputs of focus - these are likely to be the ones that address the most issues by total count, or/and with special focus (e.g., on Australian context)
+
+literature %>% 
+  dplyr::filter(flags <3) %>% 
+  select(c(vuca,synthesis,toolkit,task,socioscientific,epcog,is_review,is_socio,is_aus)) %>% 
+  ungroup() %>%
+  mutate_all(~(replace_na(., FALSE))) %>% 
+  group_by_all() %>% 
+  summarise(count = n()) %>% 
+  arrange(desc(count)) %>%
+  View()
+
+
+# check what we get if we filter on title and abstract
+literature %>%
+  dplyr::filter(!any(
+    stringr::str_detect(ab,query_table$terms_fixed1 %>% unlist() %>% paste0(collapse = "|") ),
+    stringr::str_detect(display_name,query_table$terms_fixed1 %>% unlist() %>% paste0(collapse = "|")))) %>%
+    select(c(vuca,synthesis,toolkit,task,socioscientific,epcog,is_review,is_socio,is_aus)) %>% 
+    ungroup() %>%
+    mutate_all(~(replace_na(., FALSE))) %>% 
+    group_by_all() %>% 
+    summarise(count = n()) %>% 
+    arrange(desc(count)) %>%
+  View()
+
+literature %>%
+    dplyr::filter(all(flags < 3, is.na(synthesis), is.na(epcog), is.na(socioscientific), is_socio == FALSE)) %>% View()
+```
+
+```{r selectr}
+# based on above, decide
+
+literature <- literature %>%
+  dplyr::filter(any(
+    stringr::str_detect(ab, terms),
+    stringr::str_detect(display_name, terms)))
+
+
+literature <- literature %>% 
+  dplyr::filter(flags > 1)
+
+#exclude based on title/abstract checking, for relevance (e.g., targeting mathematics education, medical context, tc.)
+
+exclude <- c('https://openalex.org/W1604305518','https://openalex.org/W1912075355','https://openalex.org/W2962598315','https://openalex.org/W2094994963','https://openalex.org/W2000831064','https://openalex.org/W4205227456','https://openalex.org/W2038890851','https://openalex.org/W2108904874','https://openalex.org/W2095567252','https://openalex.org/W4211089520','https://openalex.org/W2027514705','https://openalex.org/W2894974155','https://openalex.org/W2003016388','https://openalex.org/W1975309959','https://openalex.org/W1993699716','https://openalex.org/W2317631850','https://openalex.org/W1489817462','https://openalex.org/W1586374441','https://openalex.org/W2168638648','https://openalex.org/W1683076811','https://openalex.org/W2190204589','https://openalex.org/W2220806023','https://openalex.org/W2277237219','https://openalex.org/W4211193118','https://openalex.org/W2561072080','https://openalex.org/W1489053176','https://openalex.org/W2261088873','https://openalex.org/W1459600795','https://openalex.org/W2609405627','https://openalex.org/W2601450050','https://openalex.org/W2613148263','https://openalex.org/W2750086795','https://openalex.org/W2756625742','https://openalex.org/W2767289697','https://openalex.org/W2962237672','https://openalex.org/W2900191261','https://openalex.org/W2895139391','https://openalex.org/W2802443696','https://openalex.org/W2885647793','https://openalex.org/W2885903379','https://openalex.org/W2979547500','https://openalex.org/W2896845873','https://openalex.org/W4230928036','https://openalex.org/W2906524545','https://openalex.org/W2922653987','https://openalex.org/W2932838904','https://openalex.org/W2943854131','https://openalex.org/W2966425469','https://openalex.org/W2949379172','https://openalex.org/W2984471937','https://openalex.org/W2986520608','https://openalex.org/W3015201426','https://openalex.org/W1488316692','https://openalex.org/W3090563501','https://openalex.org/W3015011652','https://openalex.org/W3110090393','https://openalex.org/W3108342335','https://openalex.org/W3134599079','https://openalex.org/W3146159216','https://openalex.org/W3152524270','https://openalex.org/W3164106322','https://openalex.org/W3138796997','https://openalex.org/W3179999873','https://openalex.org/W3189028489','https://openalex.org/W4225718732','https://openalex.org/W4205905587','https://openalex.org/W4210634307','https://openalex.org/W4213269126','https://openalex.org/W4220692896','https://openalex.org/W4205122204','https://openalex.org/W4224923160','https://openalex.org/W4280545606','https://openalex.org/W4281772660','https://openalex.org/W4307561355','https://openalex.org/W4385743396','https://openalex.org/W4250171796','https://openalex.org/W4316589567','https://openalex.org/W4317209162','https://openalex.org/W4318763112','https://openalex.org/W4321749161','https://openalex.org/W4364378329','https://openalex.org/W4376610082','https://openalex.org/W4379013311','https://openalex.org/W4382310384','https://openalex.org/W4381252030','https://openalex.org/W4382795565','https://openalex.org/W4385344701','https://openalex.org/W4387543929','https://openalex.org/W4385462921')
+
+exclude <- append(exclude,c('https://openalex.org/W126900229','https://openalex.org/W1162855863','https://openalex.org/W1486861751','https://openalex.org/W1488851685','https://openalex.org/W1493385448','https://openalex.org/W1505483020','https://openalex.org/W1525306132','https://openalex.org/W1545609223','https://openalex.org/W1563145307','https://openalex.org/W1572295178','https://openalex.org/W1596791321','https://openalex.org/W1608406241','https://openalex.org/W1871802992','https://openalex.org/W1874704585','https://openalex.org/W1878708000','https://openalex.org/W1892263772','https://openalex.org/W1894913590','https://openalex.org/W1924219510','https://openalex.org/W1953601072','https://openalex.org/W1965715194','https://openalex.org/W1965774585','https://openalex.org/W1967736802','https://openalex.org/W1968492124','https://openalex.org/W1974408704','https://openalex.org/W1974845364','https://openalex.org/W1976562013','https://openalex.org/W1978488180','https://openalex.org/W1984531432','https://openalex.org/W1985560718','https://openalex.org/W1987262884','https://openalex.org/W1994875755','https://openalex.org/W1997617035','https://openalex.org/W2001950620','https://openalex.org/W2022937524','https://openalex.org/W2019812178','https://openalex.org/W2035822438','https://openalex.org/W2036449850','https://openalex.org/W2051456470','https://openalex.org/W2052878583','https://openalex.org/W2059411324','https://openalex.org/W2064383591','https://openalex.org/W2066568045','https://openalex.org/W2070010960','https://openalex.org/W2079952078','https://openalex.org/W2085779605','https://openalex.org/W2088872967','https://openalex.org/W2090807451','https://openalex.org/W2091019584','https://openalex.org/W2099322178', 'https://openalex.org/W110365489','https://openalex.org/W4250266026','https://openalex.org/W2013565625','https://openalex.org/W1999168879','https://openalex.org/W1977420907','https://openalex.org/W1842149437','https://openalex.org/W4231613834','https://openalex.org/W4229862880','https://openalex.org/W1980026370','https://openalex.org/W2107963644','https://openalex.org/W4206115102','https://openalex.org/W2130715217','https://openalex.org/W1973021373','https://openalex.org/W2803851860','https://openalex.org/W2894358599','https://openalex.org/W2090590508','https://openalex.org/W2116138955','https://openalex.org/W2131920030','https://openalex.org/W2477407696','https://openalex.org/W2516835018','https://openalex.org/W2521434429','https://openalex.org/W2548187339','https://openalex.org/W2561466973','https://openalex.org/W2616757401','https://openalex.org/W2655198829','https://openalex.org/W271379248','https://openalex.org/W2780812755','https://openalex.org/W918766942','https://openalex.org/W856970206','https://openalex.org/W813295017','https://openalex.org/W628167470','https://openalex.org/W4387612585','https://openalex.org/W4387517526','https://openalex.org/W4386443769'))
+
+literature <- literature %>%
+  dplyr::filter(!id %in% exclude) %>% 
+  dplyr::filter(display_name != "Books Received")
+
+retain <- c("https://openalex.org/W2014323876","https://openalex.org/W1820706591","https://openalex.org/W1820706591","https://openalex.org/W2990234060","https://openalex.org/W4283751225","https://openalex.org/W850924469")
+
+literature <- literature %>%
+  dplyr::filter(
+    all(!stringr::str_detect(paste0(ab, display_name), "medical|nurse|hospital|oncolog|surgical|surgery"),
+        !(id %in% retain)))
+
+literature <- literature %>%
+  dplyr::filter(language == "en")
+
+literature <- literature %>%
+    mutate(justice = stringr::str_detect(paste0(ab,display_name), "justice|ethic|moral|socially just|virtue|values|fairness")) 
+
+```
+
+
+```{r closer}
+# Use to do a closer review and exclusion
+literature %>% 
+    dplyr::filter(any(
+      all(any(toolkit == TRUE, is_review == TRUE), any(epcog == TRUE, socioscientific == TRUE, synthesis == TRUE, vuca == TRUE)),
+      stringr::str_detect(tolower(display_name), paste0(tolower(title_flags), collapse = "|"))
+      )) %>%
+  select(id, display_name, ab) %>% 
+  huxtable::quick_html()
+
+close_exclusion <- tribble(
+  ~id, ~exclusion_criterion,
+  "https://openalex.org/W1993396987", "exclude-L2-synthesis",
+  "https://openalex.org/W2006279691", "exclude-mobile-learning",
+  "https://openalex.org/W2106673840", "exclude-primary-education",
+  "https://openalex.org/W2403829177", "exclude-medical",
+  "https://openalex.org/W2515649876", "exclude-edtech",
+  "https://openalex.org/W2567029480", "exclude-edtech",
+  "https://openalex.org/W2900519477", "exclude-medical",
+  "https://openalex.org/W2948855571", "exclude-mobile-learning",
+  "https://openalex.org/W2963483681", "exclude-review-method-only",
+  "https://openalex.org/W4225106320", "exclude-medical",
+  "https://openalex.org/W4239007753", "exclude-editorial",
+  "https://openalex.org/W4366706078", "exclude-edtech",
+  "https://openalex.org/W4381546677", "exclude-medical",
+  "https://openalex.org/W4383557526", "exclude-writing-focus"
+)
+
+literature <-literature %>%
+  dplyr::filter(!id %in% close_exclusion$id)
+
+#if it matches the priority titles, OR is both toolkit/review AND one of the topic terms
+literature_priority <- literature %>% 
+    dplyr::filter(any(
+      all(
+        any(toolkit == TRUE, is_review == TRUE), 
+        any(epcog == TRUE, socioscientific == TRUE, synthesis == TRUE, vuca == TRUE)
+        ),
+      stringr::str_detect(tolower(display_name), paste0(tolower(title_flags), collapse = "|"))
+      ))
+
+
+###########################################################################
+###########################################################################
+######################### Hook up to Zotero c2z
+###########################################################################
+###########################################################################
+pacman::p_load_gh("oeysan/c2z")
+
+group_lib <- Zotero(user = F, id = group_id, library = TRUE, silent = TRUE, index = F)
+target_collection <- group_lib$collections$key[group_lib$collections$name == "reading"]
+
+new_collect <- Zotero(
+  zotero = group_lib,
+  collection.names = c(paste0("priority_", Sys.Date())),
+  library = T,
+  create = T 
+) 
+
+new_collect$collections <- new_collect$collections %>%
+  dplyr::mutate(parentCollection = dplyr::case_when(name == paste0("priority_", Sys.Date()) ~ target_collection,
+                                                    .default = parentCollection))
+
+  
+c2z::ZoteroPost(
+  new_collect,
+  post.collections = T
+)
+
+
+# Openalex inherits MAG I think, so in theory https://github.com/zotero/translators/blob/master/Microsoft%20Academic.js should give some guidance 
+items <- literature_priority %>%
+    unnest_wider(col = c(author, concepts), names_sep = "_") %>%
+      rowwise() %>%
+    mutate(
+        creators = list( #needs to be a tibble, creatorType, firstName, lastName 
+            data.frame(
+                creatorType = "author",
+                name = author_au_display_name,
+                firstName = sapply(author_au_display_name, function(names) sub(" .*", "", names)),
+                lastName = sapply(author_au_display_name, function(names) sub(".* ", "", names))
+            ) %>% 
+              tibble::remove_rownames()
+        ),
+        tags = list( #needs to be tag, type (set type to 1 for them all)
+            data.frame(
+                tag = concepts_display_name,
+                type = 1
+            )
+        )) %>%
+  transmute(title = display_name,
+         abstractNote = ab, 
+         date = publication_date,
+         rights = license, 
+         url = ifelse(!is.na(oa_url), oa_url, url),
+         language = language,
+         DOI = doi,
+         extra = paste0("grants:", grants, "\n",
+               "cited_by_count:",  cited_by_count, "\n",
+               "counts_by_year:", counts_by_year, "\n",
+               "referenced_works:", referenced_works, "\n",
+               "related_works:", related_works, "\n",
+               "is_paratext:", is_paratext, "\n",
+               "is_retracted:", is_retracted, "\n", collapse = "\n"),
+         pages = paste0(first_page, "-", last_page),
+         numPages = as.numeric(last_page) - as.numeric(first_page),
+         volume = volume,
+         issue = issue,
+         ISSN = issn_l,
+         creators = list(creators),
+         accessDate = Sys.Date(),
+        itemType = case_when(type == "article" ~ "journalArticle",
+                             type == "dissertation" ~ "thesis",
+                             type == "book-chapter" ~ "bookSection",
+                             .default = "document"),
+         tags = list(tags),
+         publisher = host_organization, 
+         university = ifelse(type == "dissertation", host_organization, ""),
+         bookTitle = ifelse(type == "book-chapter", so, ""),
+         publicationTitle = ifelse(type == "article", so, ""),
+        collections = c(new_collect$collection.key)
+         )
+
+
+# Check that the items from openalexR as Zotero-friendly
+#items <- items %>% select(title, creators) %>% dplyr::left_join(item_form, by = "title") 
+#items <- items %>% 
+#  mutate(creators = list(flatten(lst(creators)))) 
+
+items <- c2z::ZoteroFormat(items, check.structure = TRUE)
+
+group_lib$items <- c2z:::AddAppend(items, group_lib$items)
+
+#ZoteroAdd(group_lib, metadata = items, silent = F)
+
+zlog <- c2z::ZoteroPost(
+  zotero = group_lib,
+  post.items = T,
+  post.collections = T
+)
+
+
+```
+

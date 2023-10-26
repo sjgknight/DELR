@@ -1,0 +1,17 @@
+---
+
+---
+
+hh
+
+```{r}
+literature %>% 
+    dplyr::filter(any(
+      all(any(toolkit == TRUE, is_review == TRUE), any(epcog == TRUE, socioscientific == TRUE, synthesis == TRUE, vuca == TRUE)),
+      stringr::str_detect(tolower(display_name), paste0(tolower(title_flags), collapse = "|"))
+      )) 
+
+#ideally add the target items to zotero here 
+
+```
+

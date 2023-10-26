@@ -1,12 +1,21 @@
-#' Title
+#' Get github repository information
+#' @description
+#' Takes a list of github repositories, returns a tibble of their names, descriptions, URL, and last commit date
 #'
-#' @param repo_urls
+#' @details
+#' Largely useful just to tabulate the information and get the commit date as a way of finding the most recently committed (/weeding out inactive repos)
+#'
+#'
+#' @param repo_urls a vector of repository strings of form "owner/repo"
 #'
 #' @return
 #' @export
 #'
-#' @examples
+#' @examples get_github_repos_info(c("sjgknight/rureporting", "sjgknight/learnr"))
 #' @importFrom gh gh
+#' @importFrom tibble tibble
+#' @importFrom dplyr bind_rows
+#' @importFrom glue glue
 get_github_repos_info <- function(repo_urls) {
   repo_data_list <- lapply(repo_urls, function(url) {
     # Extract the repository owner and name from the GitHub URL
@@ -19,7 +28,7 @@ get_github_repos_info <- function(repo_urls) {
     repo_info <- gh::gh(endpoint = glue::glue("GET /repos/{owner}/{repo}"))
 
     # Create a tibble with the desired information
-    tibble(
+    tibble::tibble(
       Name = repo_info$name,
       Description = repo_info$description,
       URL = repo_info$html_url,
@@ -27,6 +36,6 @@ get_github_repos_info <- function(repo_urls) {
     )
   })
 
-  repo_data <- bind_rows(repo_data_list)
+  repo_data <- dplyr::bind_rows(repo_data_list)
   return(repo_data)
 }

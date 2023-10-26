@@ -10,9 +10,11 @@ pacman::p_load(magrittr, purrr, dplyr)
 
 pacman::p_load(RefManageR)
 pacman::p_load_gh("paleolimbot/rbbt")
-pacman::p_load_gh("AtlasOfLivingAustralia/potions")
-pacman::p_load_gh("AtlasOfLivingAustralia/boobook")
-pacman::p_load_gh("kleinlennart/zoter")
+# pacman::p_load_gh("AtlasOfLivingAustralia/potions")
+# pacman::p_load_gh("AtlasOfLivingAustralia/boobook")
+# pacman::p_load_gh("kleinlennart/zoter")
+pacman::p_load_gh("oeysan/c2z")
+
 
 zrclients <- c(
   "ropensci/RefManageR",
@@ -29,9 +31,9 @@ x <- get_github_repos_info(zrclients)
 #purrr::map(zrclients, ~pacman::p_info(.x) %>% .[(c("Package","Description","URL","Packaged"))])
 
 # For managing Zotero (via API):
-# I think zoteror and possibly zoterro are superceded by...
+# I think zoteror and possibly zoterro are superseded by...
 # boobook; zoter is also more recent but looks less complete
-# c2z may also be useful (although especially for Norweigans)
+# c2z may be useful (although especially for Norweigans), it is possibly the best one for writing to the zotero db
 
 # For cite-as-you-write style functionality:
 # RefmanageR and rbbt are both useful 
@@ -48,9 +50,16 @@ Note templates to use
 Suggests a tag structure
 
 
-```{r zotero-setup}
-#c2z::
+```{r zotero-setup-c2z}
 
+usethis::edit_r_environ()
+#needs lines for:
+# ZOTERO_USER = "identifier" # Get identifier from web interface
+# ZOTERO_API = "key" # from web interface
+
+Sys.getenv("ZOTERO_KEY")
+
+group_lib <- Zotero(user = FALSE, id = group_id, library = TRUE, silent = TRUE, index = F, export = F)
 
 ```
 

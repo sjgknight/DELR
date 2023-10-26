@@ -8,7 +8,13 @@ Use to either setup and import searches OR/and to read search metadata from Zote
 ```{r setup}
 
 pacman::p_load_gh("kaitlynhair/rwos")
-pacman::p_load(openalexR, magrittr, purrr, tidyr, tibble, dplyr, rscopus)
+pacman::p_load(openalexR, rscopus)
+
+#https://github.com/kaitlynhair/scopusAPI #alternative scopus
+#devtools::install_github("sjgknight/ericr")
+
+source("R/db_search.R")
+source("R/search_oa.R")
 
 #There's also some scholar and google possibility
 
@@ -18,7 +24,7 @@ pacman::p_load(openalexR, magrittr, purrr, tidyr, tibble, dplyr, rscopus)
 Map the topic space 
 
 1. epistemic cognition OR epistemological beliefs OR epistemic beliefs OR epistemic thinking OR personal epistemology 
-2. socioscientific issues (SSI) teaching and curriculum
+2. socioscientific issues (SSI) teaching and curriculum, and topic selection
 3. synthesis writing
 4. possibly VUCA (volatility, uncertainty, complexity, ambiguity) 
 
@@ -31,6 +37,9 @@ And their application to:
 5. "design patterns" OR "toolkit" OR ...
 6. "edtech" ?
 
+"task demand" (per https://onlinelibrary.wiley.com/doi/abs/10.1002/tea.21208 and the piece in the proposal; https://scholar.google.co.uk/scholar?cites=634242713720685217&as_sdt=2005&sciodt=0,5&hl=en )https://scholar.google.co.uk/scholar?cites=7818746835395028111&as_sdt=2005&sciodt=0,5&hl=en  Perry N, Phillips L, Dowler J. 2004. Examining Features of Tasks and Their Potential to Promote Self-Regulated Learning. Teach. Coll. Rec.
+106(9):1854–78
+
 ```{r testqueries}
 
 
@@ -39,57 +48,273 @@ And their application to:
 ```
 
 
+```{r definequeries}
 
+#in the below you can either define each import or define here
+# outputname is the shorthand used in filenames, etc. Must be distinct.
+# termset1, termset2, etc. will be collapsed into "OR" statements separated by AND statements using the 'query_table_process' function. You can skip that function and manually create the table. 
+# keyterm is a single term to search for (for openalex) 
+# from and to are date filters, they can be left blank to search everything (and then the query fucntion will update)
+
+query_table <- tibble::tribble(
+  ~outputname, ~terms_fixed1, ~terms_fixed2, ~terms_stem1, ~keyterm, ~from, ~to)
+
+#query_table <- DataEditR::data_edit(query_table, code = T, hide = F)
+#datapasta::df_paste(query_table)
+
+query_table <- data.frame(
+  stringsAsFactors = FALSE,
+        outputname = c("epcog", "socioscientific", "synthesis", "vuca", "task", "toolkit"),
+          terms_fixed1 = NA,
+          terms_fixed2 = NA,
+          terms_stem1 = NA,
+              keyterm = c("epistemic cognition",
+                          "socioscientific issues-based",
+                          "synthesis writing",
+                          "vuca education",
+                          "cognitive demand", 
+                          "pedagogical toolkit"),
+              from = NA,
+                to = NA
+   )
+
+epcog_terms <- c("epistemic cognition", "epistemological beliefs", "epistemic beliefs", "epistemic thinking", "personal epistemology")
+socio_terms <- c("socioscientific issues", "cross-curriculum priorities")
+vuca_terms <- c("volatility uncertainty complexity and ambiguity", "vuca")
+ips_terms <- c("information problem solving")
+task_terms <- c("cognitive task demand", "intellectual demand")
+toolkit_terms <- c("design based research", "design principles", "design based implementation research", "dbir", "research practice partnership", "research practice partnerships", "learning toolkit", "pedagogic toolkit", "pedagogical toolkit", "teaching toolkit", "teaching guidelines", "educator toolkit", "learning design", "design for learning", "curriculum design", "curriculum resource", "lesson plans", "lesson plan", "learning resources", "teacher toolkit", "learner toolkit", "learning toolkit", "pedagogic toolkit", "pedagogical toolkit", "toolkit for pedagogy", "teacher handbook", "educator handbook", "teaching handbook", "educational handbook", "learning handbook", "learning guide", "teaching guide", "pedagogic guide")
+
+evsynthesis_terms <- c("evidence synthesis", "research synthesis", "systematic review", "literature synthesis", "scoping review", "realist synthesis", "stakeholder engaged synthesis", "rapid review", "state of the art review", "review of reviews", "evidence paper", "evidence map", "evidence maps", "annotated bibliography")
+
+
+context_terms <- c("teacher", "teaching", "teach", "classroom", "assessment", "learning", "curriculum", "lesson", "instructor", "school", "university", "college", "student", "learner", "learners", "students")
+
+query_table <- query_table %>%
+  mutate(terms_fixed1 = ifelse(outputname == "epcog", list(epcog_terms), terms_fixed1),
+         terms_fixed1 = ifelse(outputname == "synthesis", list(c("synthesis writing", "source based writing", "text integration", "writing from multiple sources", "synthesis task", "multiple source writing", "multiple document processing")), terms_fixed1),
+         terms_fixed1 = ifelse(outputname == "socioscientific", list(socio_terms), terms_fixed1),
+          terms_fixed1 = ifelse(outputname == "vuca", list(vuca_terms), terms_fixed1),
+          terms_fixed1 = ifelse(outputname == "task", list(task_terms), terms_fixed1),
+          terms_fixed1 = ifelse(outputname == "toolkit", list(toolkit_terms), terms_fixed1),
+         terms_fixed2 = ifelse(outputname == "toolkit", list(evsynthesis_terms), terms_fixed2),
+
+                           terms_stem1 = list(context_terms)
+         )
+
+
+#query_table_process stems on some, and applies Boolean logic
+#tm::stemCompletion may also be useful
+query_table <- query_table %>% 
+  select(-c(terms_fixed2)) %>% 
+  query_table_process()
+
+
+query_table <- query_table %>% 
+  mutate(searchquery_oa = glue::glue("({terms_fixed1}) AND ({terms_stem1})"))
+
+query_table <- query_table %>%
+  mutate(searchquery_oa = ifelse(outputname == "toolkit", 
+                                 paste0(searchquery_oa, " AND (", query_quoter(evsynthesis_terms), ")"),
+                                 searchquery_oa)
+         )
+
+readr::write_rds(query_table, paste0("data/query_table_", Sys.Date(), ".rds"))
+
+```
+
+This block runs a function that takes terms, databases, and filters. 
+The date checking doesn't work
 ```{r retrievequeries}
-data_file <- fs::dir_ls("data/", regexp = "search_output_")
-data_date <- stringr::str_extract(data_file, "\\d{4}-\\d{2}-\\d{2}")
+# according to https://direct.mit.edu/qss/article/2/1/20/97574/Large-scale-comparison-of-bibliographic-data crossref and MAG are big, these are the primary data sources for openalex
+# it would be useful to also add ERIC because of its grey literature coverage, although it may be included
+# pacman::p_load_gh("sjgknight/ericr")
 
-if(any(
-  length(data_file)>0, #does data exist, and 
-  Sys.Date()<=data_date)){
+# take query_table and extract key variables as below. 
+# then for each db, use a "query_define" function to define the query structure
+# openalex doesn't have a TAK search, and you can't "OR" between filter types, so search everything, and filter locally. 
+# eric doesn't have a TAK search, but you can OR between, so add that to the query_define 
+# ideally check for updates since it was last run, and merge into single df
+# openalex uses crossref, which should include acm dl, 
 
-terms <- paste('"epistemic cognition"', '"epistemological beliefs"', '"epistemic beliefs"', sep = "|")
-term_core <- '"epistemic cognition"'
+query_table %>%
+  purrr::pmap(function(outputname, keyterm, searchquery_oa,...){
+    search_oa(db="openalex", outputname = outputname, keyterm = keyterm, searchquery = searchquery_oa)
+  })
 
-epcog_raw <- openalexR::oa_fetch(
-entity = 'works',
-filter = paste0("from_publication_date:", data_date),
-search = term_core) %>%
-  mutate(term_core_in_raw = TRUE)
+```
 
-epcog_ft <- openalexR::oa_fetch(
-entity = 'works',
-filter = paste0("from_publication_date:", data_date),
-fulltext.search = terms) %>%
-  mutate(terms_in_ft = TRUE)
+same function should work for scopus as below (not well tested)
+```{r scopus}
+# Remember to check https://dev.elsevier.com/apikey/manage
+#rscopus::set_api_key(paste0(options("elsevier_api")))
+#key <- paste0(options("elsevier_api"))
+#tok <- rscopus::elsevier_authenticate(verbose = T)
+#hdr <- rscopus::auth_token_header()
+#hdr = inst_token_header(token)
+#devtools::install_github("juba/rwos")
+#library(rwos)
+#sid <- wos_authenticate()
 
-epcog_ab <- openalexR::oa_fetch(
-entity = 'works', 
-filter = paste0("from_publication_date:", data_date),
-abstract.search = terms) %>%
-  mutate(terms_in_ab = TRUE)
-
-
-epcog_ti <- openalexR::oa_fetch(
-entity = 'works', 
-filter = paste0("from_publication_date:", data_date),
-title.search = terms) %>%
-  mutate(terms_in_ti = TRUE)
-
-epcog <- bind_rows(epcog_ab, epcog_ft, epcog_raw, epcog_ti)
-
-last_saved <- Sys.Date()
-
-readr::write_rds(epcog, paste0("data/search_output_", last_saved, ".rds"))
-
-} else {
-  
-  epcog <- readr::read_rds(data_file)
-}
-
-epcog %>% filter(if_any(everything(), ~stringr::str_detect(., "learning"))) %>% nrow()
+query_table %>%
+  purrr::pmap(function(outputname, searchquery_oa,...){
+    search_oa(db="scopus", outputname = outputname, searchquery = searchquery_oa)
+  })
 
 
 ```
 
+Combiner - combine by db and date, merge, re-save RDS, keep most recent RDS
+```{r combine}
 
+# First combine same-db by date
+list.files("data", "*.rds") %>%
+    as_tibble() %>%
+    filter(stringr::str_detect(value, "search_output_")) %>% 
+    mutate(value = stringr::str_remove(value, ".rds"),
+           value = stringr::str_remove(value, "search_output_")) %>% 
+    tidyr::separate_wider_delim(delim = "_", cols = everything(), names = c("db", "date", "outputname"))
+
+
+# Then combine across-dbs 
+
+epcog <- epcog %>%
+    mutate(in_scopus = if_else(doi %in% epcog_scopus$`prism:doi`, TRUE, 
+                               if_else(tolower(display_name) %in% tolower(epcog_scopus$`dc:title`), TRUE, 
+                                       if_else(any(unlist(ids) %in% unlist(c(unlist(epcog_scopus$`prism:doi`), epcog_scopus$`dc:identifier`), epcog_scopus$`eid`)), TRUE, NA))))
+
+
+#modify list to only those not in the main epcog
+epcog_scopus <- epcog_scopus %>% 
+  filter(!`prism:doi` %in% epcog$doi) %>%
+    filter(!tolower(`dc:title`) %in% tolower(epcog$display_name)) %>%
+           filter(!any(unlist(c(`prism:doi`, `dc:identifier`, `eid`)) %in% unlist(epcog$ids)))
+
+epcog_scopus <- epcog_scopus %>%
+ tidyr::separate_wider_delim(`prism:pageRange`, delim = "-", names = c("first_page", "last_page"), too_few = "align_start") 
+
+col_match <- c(
+  "id" = "eid",
+  "display_name" = "dc:title",
+  "author" = "dc:creator",
+  "publication_date" = "prism:coverDate",
+  "is_oa" = "openaccessFlag",
+  "so" = "prism:publicationName",
+  "doi" = "prism:doi",
+  "type" = "prism:aggregationType",
+  "volume" = "prism:volume",
+  "issue" = "prism:issueIdentifier",
+  "first_page" = "first_page",
+  "last_page" = "last_page"
+)
+
+#surely there's an easier way
+typs <- epcog %>% 
+  select(all_of(names(col_match))) %>% 
+  relocate(names(col_match)) %>% 
+  sapply(., class)
+
+
+x<-epcog_scopus %>% 
+  rename(all_of(col_match)) %>% 
+    select(all_of(names(col_match))) %>%
+  relocate(names(col_match)) %>%
+  mutate(across(everything(), ~ `class<-`(.x, class(epcog[[cur_column()]])))) %>%
+  mutate(in_scopus = TRUE)
+
+  #readr::type_convert(readr::cols(!!!purrr::map_chr(epcog, class)))
+  #mutate(across(everything(),list(~paste0(unname(typs)))))
+#map2(., stringr::str_c("as.", unname(typs)), ~get(.y)(.x))
+
+epcog <- x %>% 
+  dplyr::bind_rows(epcog, x)
+ 
+rm(x)
+rm(epcog_scopus)
+```
+
+Using broad searches, and narrowing focus but in a way that will enable future work to build on this. 
+```{r loadr}
+
+#basename <- "data/search_output_openalex_2023-10-18_"
+#glue::glue("{basename}socioscientific.rds")
+
+# First load each dataset and label them
+socioscientific <- readr::read_rds(list.files("data/", pattern = "openalex_.*_socioscientific.rds", full.names = T)) %>%
+  mutate(socioscientific = TRUE,
+         is_review = stringr::str_detect(paste0(display_name, ab, concepts),paste0(evsynthesis_terms, collapse = "|")),
+         is_aus = stringr::str_detect(paste0(display_name, ab, concepts), "Australia|New South Wales"),
+         is_socio = stringr::str_detect(paste0(display_name, ab, concepts), "socioscientific"))
+
+epcog <- readr::read_rds(list.files("data/", pattern = "openalex_.*_epcog.rds", full.names = T)) %>%
+  mutate(epcog = TRUE,
+         is_review = stringr::str_detect(paste0(display_name, ab, concepts),paste0(evsynthesis_terms, collapse = "|")),
+         is_aus = stringr::str_detect(paste0(display_name, ab, concepts), "Australia|New South Wales"),
+         is_socio = stringr::str_detect(paste0(display_name, ab, concepts), "socioscientific"))
+
+toolkit <- readr::read_rds(list.files("data/", pattern = "openalex_.*_toolkit.rds", full.names = T)) %>%
+  mutate(toolkit = TRUE,
+         is_review = stringr::str_detect(paste0(display_name, ab, concepts),paste0(evsynthesis_terms, collapse = "|")),
+         is_aus = stringr::str_detect(paste0(display_name, ab, concepts), "Australia|New South Wales"),
+         is_socio = stringr::str_detect(paste0(display_name, ab, concepts), "socioscientific"))
+
+task <- readr::read_rds(list.files("data/", pattern = "openalex_.*_task.rds", full.names = T)) %>%
+  mutate(task = TRUE,
+         is_review = stringr::str_detect(paste0(display_name, ab, concepts),paste0(evsynthesis_terms, collapse = "|")),
+         is_aus = stringr::str_detect(paste0(display_name, ab, concepts), "Australia|New South Wales"),
+         is_socio = stringr::str_detect(paste0(display_name, ab, concepts), "socioscientific"))
+
+vuca <- readr::read_rds(list.files("data/", pattern = "openalex_.*_vuca.rds", full.names = T)) %>%
+  mutate(vuca = TRUE,
+         is_review = stringr::str_detect(paste0(display_name, ab, concepts),paste0(evsynthesis_terms, collapse = "|")),
+         is_aus = stringr::str_detect(paste0(display_name, ab, concepts), "Australia|New South Wales"),
+         is_socio = stringr::str_detect(paste0(display_name, ab, concepts), "socioscientific"))
+
+synthesis <- readr::read_rds(list.files("data/", pattern = "openalex_.*_synthesis.rds", full.names = T)) %>%
+  mutate(synthesis = TRUE,
+         is_review = stringr::str_detect(paste0(display_name, ab, concepts),paste0(evsynthesis_terms, collapse = "|")),
+         is_aus = stringr::str_detect(paste0(display_name, ab, concepts), "Australia|New South Wales"),
+         is_socio = stringr::str_detect(paste0(display_name, ab, concepts), "socioscientific"))
+
+```
+
+```{r merger}
+
+
+#then merge them, and add a 'total' column
+literature <- dplyr::bind_rows(socioscientific, task, vuca, toolkit, epcog, synthesis)
+
+literature <- literature %>%
+#        group_by(as.factor(id)) %>%
+        group_by(across(
+          -c(terms_in_ab, term_core_in_raw, terms_in_ft, terms_in_ti, is_aus, is_socio, is_review, epcog, socioscientific, task, toolkit, synthesis, vuca)
+        )) %>%
+        summarize(
+          terms_in_ab = any(terms_in_ab),
+          term_core_in_raw = any(term_core_in_raw),
+          terms_in_ft = any(terms_in_ft),
+          terms_in_ti = any(terms_in_ti),
+          is_aus = any(is_aus), 
+          is_socio = any(is_socio), 
+          is_review = any(is_review), 
+          epcog = any(epcog), 
+          socioscientific = any(socioscientific),
+          task = any(task), 
+          toolkit = any(toolkit), 
+          synthesis = any(synthesis), 
+          vuca = any(vuca)
+        ) %>% 
+  ungroup() %>%
+  unique()
+
+literature <- literature %>%
+  rowwise() %>%
+  mutate(flags = sum(c(vuca, synthesis, toolkit, task, socioscientific, epcog, is_review, is_socio, is_aus), na.rm = T ))
+
+readr::write_rds(literature, paste0("data/literature_", Sys.Date(), ".rds"))
+
+rm(list = ls())
+gc()
+
+
+```

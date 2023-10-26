@@ -1,0 +1,165 @@
+
+
+
+this works but isn't functionalised
+```{r}
+
+outputname <- "epcog"
+db <- "openalex"
+
+#if periodic issues occur e.g. a deparse, try remotes::install_github("ropensci/openalexR") 
+data_file <- fs::dir_ls("data/", regexp = glue::glue("search_output_{db}.*{outputname}"))
+data_file <- data_file[which.max(file.mtime(data_file))]
+data_date <- if(length(data_file)>0){
+  stringr::str_extract(data_file, "\\d{4}-\\d{2}-\\d{2}")} else {
+    as.Date("1900-01-01")
+  }
+
+if(any(
+  length(data_file)>0, #does data exist, and 
+  Sys.Date()<=data_date)){
+
+content_terms <- paste('"epistemic cognition"', 
+                       '"epistemological beliefs"', 
+                       '"epistemic beliefs"', 
+                       '"epistemic thinking"', 
+                       '"personal epistemology"', 
+                       sep = " OR ")
+context_terms <- paste('"teacher"',
+                       '"classroom"',
+                       '"assessment"', 
+                       '"learning"', 
+                       '"curriculum"',
+                       '"lesson"',
+                       '"instructor"',
+                       sep = " OR ")
+
+term_core <- '"epistemic cognition"'
+
+query_terms <- paste0("(", content_terms, ") AND (",context_terms , ")")
+
+cat(query_terms)
+
+#assign(glue("{outputname}_raw"), "hello world") #or pipe 
+#"hello world" %>% assign(glue("{outputname}_raw"), .)
+# 'search' function takes simple input
+epcog_raw <- openalexR::oa_fetch(
+entity = 'works',
+#from_publication_date = data_date,
+search = term_core) %>%
+  mutate(term_core_in_raw = TRUE)
+
+# 'fulltext.search' searches full text, can be Boolean
+epcog_ft <- openalexR::oa_fetch(
+entity = 'works',
+from_publication_date = data_date,
+fulltext.search = query_terms,
+verbose=T) %>%
+  mutate(terms_in_ft = TRUE)
+
+# 'abstract.search' 
+epcog_ab <- openalexR::oa_fetch(
+entity = 'works', 
+from_publication_date.filter = paste0("from_publication_date:", data_date),
+abstract.search = query_terms) %>%
+  mutate(terms_in_ab = TRUE)
+
+# 'title.search' 
+epcog_ti <- openalexR::oa_fetch(
+entity = 'works', 
+#filter = paste0("from_publication_date:", data_date),
+title.search = query_terms) %>%
+  mutate(terms_in_ti = TRUE)
+
+epcog <- bind_rows(epcog_ab, epcog_ft, epcog_raw, epcog_ti)
+
+# Group and summarise
+# There are 9741 results pre
+# And 9733 results post. I think this is because epcog_ft_ captures most things
+epcog <- epcog %>%
+    group_by(across(-c(terms_in_ab,term_core_in_raw,terms_in_ft,terms_in_ti))) %>%
+    summarize(
+        terms_in_ab = any(terms_in_ab),
+        term_core_in_raw = any(term_core_in_raw),
+        terms_in_ft = any(terms_in_ft),
+        terms_in_ti = any(terms_in_ti)
+    ) %>% ungroup()
+
+last_saved <- Sys.Date()
+
+readr::write_rds(epcog, paste0("data/search_output_", 
+                               deparse(substitute(epcog)),
+                               "_", 
+                               last_saved, 
+                               ".rds")
+                 )
+
+#rm(list = ls())
+
+} else {
+  
+  epcog <- readr::read_rds(data_file)
+}
+
+
+
+epcog %>% filter(if_any(everything(), ~stringr::str_detect(., context_terms))) %>% nrow()
+
+epcog %>%
+    filter(terms_in_ti == TRUE|terms_in_ab == TRUE) %>%
+    nrow()
+
+
+```
+
+
+```{r dataeditor}
+
+DataEditR::data_edit(epcog)
+
+```
+
+
+### An alternative approach involving semi-automated search specification
+
+```{r autosearch}
+
+pacman::p_load_gh("bakaburg1/BaySREn")
+
+# Initial query to be built on domain knowledge. It accepts OR, AND, NOT boolean
+# operators and round brackets to group terms.
+query <- glue::glue('(({content_terms}) AND ({context_terms}) AND (design OR toolkit OR assessment OR curriculum OR lesson OR resources))')
+
+# Year filter. The framework converts it to the API-specific format seamlessly.
+# common logical comparators can be used, i.e. <, <=, >, >=, while dashes
+# denotes inclusive date intervals. A single year restricts results to one year
+# period.
+year_filter <- "2014-2024"
+
+perform_search_session
+
+options(baysren.wos_api_key = "your-wos-api-key")
+
+
+```
+
+```{r}
+
+epcog_scopus <- rscopus::scopus_search(query = paste0("TITLE-ABS-KEY(", searchquery_oa, ")"), 
+                                       api_key = rscopus::get_api_key(),
+                                       #headers = hdr,
+                       verbose = T
+                      )
+
+epcog_scopus <- gen_entries_to_df(epcog_scopus$entries)
+epcog_scopus <- epcog_scopus$df
+
+readr::write_rds(epcog_scopus, paste0("data/search_output_", 
+                               deparse(substitute(epcog_scopus)),
+                               "_", 
+                               last_saved, 
+                               ".rds")
+                 )
+
+```
+
